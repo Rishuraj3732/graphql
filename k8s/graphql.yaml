@@ -1,0 +1,92 @@
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: graphql
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: graphql-data
+  namespace: graphql
+spec:
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: 1Gi
+  storageClassName: standard
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: graphql
+  namespace: graphql
+spec:
+  replicas: 1
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      app: graphql
+  template:
+    metadata:
+      labels:
+        app: graphql
+    spec:
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 10001
+        runAsGroup: 10001
+        fsGroup: 10001
+      containers:
+        - name: graphql
+          image: graphql:0.0.2
+          imagePullPolicy: Never
+          ports:
+            - name: http
+              containerPort: 8080
+              protocol: TCP
+          env:
+            - name: SPRING_DATASOURCE_URL
+              value: jdbc:h2:file:/data/graphql
+          volumeMounts:
+            - name: graphql-data
+              mountPath: /data
+          startupProbe:
+            tcpSocket:
+              port: http
+            periodSeconds: 5
+            failureThreshold: 30
+          readinessProbe:
+            tcpSocket:
+              port: http
+            periodSeconds: 5
+          livenessProbe:
+            tcpSocket:
+              port: http
+            periodSeconds: 10
+          resources:
+            requests:
+              cpu: 100m
+              memory: 256Mi
+            limits:
+              cpu: "1"
+              memory: 768Mi
+      volumes:
+        - name: graphql-data
+          persistentVolumeClaim:
+            claimName: graphql-data
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: graphql
+  namespace: graphql
+spec:
+  type: ClusterIP
+  selector:
+    app: graphql
+  ports:
+    - name: http
+      port: 8080
+      targetPort: http
